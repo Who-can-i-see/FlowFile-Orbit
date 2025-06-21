@@ -1,223 +1,16 @@
+from datetime import datetime
 import pypinyin
 from pypinyin import Style
 import sys
-from os import listdir, path, startfile, makedirs, system, rename, remove
+from os import listdir, path, startfile, makedirs, system, rename, remove, system
+from pathlib import Path
 from shutil import copyfile, move, rmtree
 from win32com.client import Dispatch
 import json
-from PyQt5.QtCore import Qt, QSize, QTimer, QPoint, QMimeData, QUrl
+from PyQt5.QtCore import Qt, QPoint, QMimeData, QUrl
 from PyQt5.QtGui import QIcon, QDrag, QPixmap, QPainter
-from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWidgetItem, 
-                            QMenu, QInputDialog, QLineEdit, QPushButton, QDialog, 
-                            QGridLayout, QFileDialog, QLabel, QVBoxLayout, QMessageBox)
-
-
-# ==================== 自定义样式弹窗 ====================
-class StyledMessageBox(QDialog):
-    def __init__(self, parent=None, title="提示", message="", buttons=[]):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.TipWindow = QFrame(self)
-        self.setStyleSheet("""
-            QFrame {
-                background: rgba(50, 50, 50, 220);
-                border-radius: 10px;
-            }
-            QLabel {
-                color: white;
-                background: transparent;
-                font: 18px '黑体';
-            }
-            QPushButton {
-                background: rgb(70, 70, 70);
-                color: white;
-                font: 14px '黑体';
-                border-radius: 5px;
-                padding: 8px 20px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background: rgb(90, 90, 90);
-            }
-        """)
-        
-        layout = QVBoxLayout()
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font: bold 18px '微软雅黑';")
-        layout.addWidget(title_label)
-        
-        message_label = QLabel(message)
-        layout.addWidget(message_label)
-        
-        btn_layout = QVBoxLayout()
-        for btn_text in buttons:
-            btn = QPushButton(btn_text)
-            btn.clicked.connect(lambda _, t=btn_text: self.done(buttons.index(t)+1))
-            btn_layout.addWidget(btn)
-        
-        layout.addLayout(btn_layout)
-        self.setLayout(layout)
-        self.TipWindow.setGeometry(0, 0, title_label.width(), 150)
-        self.resize(300, 150)
-
-
-# ==================== 设置对话框 ====================
-class SettingDialog(QDialog):
-    def __init__(self, setting_type="general"):
-        super().__init__()
-        self.dragPosition = None
-        self.setting_type = setting_type
-
-        try:
-            with open('config.json', 'r', encoding='utf-8') as config:
-                self.config = json.load(config)
-        except Exception as e:
-            self.config = {"RootFolder": ""}
-
-        self.QSettingBackgroundFrame = QFrame(self)
-        self.initUI()
-
-    def initUI(self):
-        self.setWindowTitle(f"设置 - {self.setting_type}")
-        self.resize(600, 500)
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("""QLineEdit {border: 1px solid rgb(41, 57, 85);border-radius: 3px;background: white;selection-color: green;font-size: 14px;font-family: "黑体";color: black;} QLineEdit:hover {border: 1px solid blue;} QPushButton {background-color: rgb(41, 57, 85);color: white;border-radius: 4px;font-size: 14px;font-family: "黑体";}""")
-
-        self.QSettingBackgroundFrame.setObjectName('BackgroundFrame')
-        self.QSettingBackgroundFrame.setGeometry(0, 0, 600, 500)
-        self.QSettingBackgroundFrame.mousePressEvent = self.mousePressEvent
-        self.QSettingBackgroundFrame.mouseMoveEvent = self.mouseMoveEvent
-        self.QSettingBackgroundFrame.setStyleSheet('''#BackgroundFrame{background-color: rgba(0, 0, 0, 200);border-radius: 10px;}''')
-
-        if self.setting_type == "general":
-            self.initGeneralSettings()
-        elif self.setting_type == "icons":
-            self.initIconSettings()
-        else:
-            doc.loadList()
-
-        self.QExitButton = QPushButton(self)
-        self.QExitButton.setGeometry(560, 20, 20, 20)
-        self.QExitButton.setStyleSheet("QPushButton{background-color: darkred;border: none;border-radius: 10px;} QPushButton:hover{background-color: red;}")
-        self.QExitButton.clicked.connect(self.close)
-
-
-    def initGeneralSettings(self):
-        self.QRootFolderEdit = QLineEdit(self)
-        self.QRootFolderEdit.setGeometry(10, 60, 280, 30)
-        self.QRootFolderEdit.setText(self.config['RootFolder'])
-        self.QRootFolderEdit.setPlaceholderText("请输入初始目录")
-
-        self.QSaveButton = QPushButton(self)
-        self.QSaveButton.setGeometry(295, 60, 100, 30)
-        self.QSaveButton.setText("保存")
-        self.QSaveButton.clicked.connect(self.save)
-
-    def initIconSettings(self):
-        self.QManageFileIconFrame = QFrame(self)
-        self.QManageFileIconFrame.setGeometry(10, 60, 580, 420)
-        self.QManageFileIconFrame.setStyleSheet('''background-color: rgb(41, 57, 85, 100);border-radius: 10px;''')
-        self.loadFileIconList()
-
-    def save(self):
-        RootFolder = f"{self.QRootFolderEdit.text()}"
-        if not path.exists(RootFolder):
-            QMessageBox.warning(self, "错误", "根目录不存在！")
-            return
-        
-        self.config["RootFolder"] = RootFolder
-        try:
-            with open('config.json', 'w', encoding='utf-8') as configFile:
-                json.dump(self.config, configFile)
-        except Exception as e:
-            self.showMessage("错误", f"保存失败: {str(e)}")
-
-    def loadFileIconList(self):
-        try:
-            FileIconList = [file for file in listdir("resource/img") if file.endswith('.png')]
-        except Exception as e:
-            FileIconList = []
-
-        [child.deleteLater() for child in self.QManageFileIconFrame.children()]
-
-        QFileIconListGridLayout = QGridLayout(self.QManageFileIconFrame)
-        QFileIconListGridLayout.setContentsMargins(10, 10, 10, 10)
-        QFileIconListGridLayout.setHorizontalSpacing(10)
-        QFileIconListGridLayout.setVerticalSpacing(10)
-
-        maxButtonsPerRow = 11
-        for index, file in enumerate(FileIconList):
-            QFileIconButton = QPushButton(self.QManageFileIconFrame)
-            QFileIconButton.setIcon(QIcon(f"resource/img/{file}"))
-            QFileIconButton.setIconSize(QSize(32, 32))
-            QFileIconButton.setFixedSize(44, 44)
-            row = index // maxButtonsPerRow
-            col = index % maxButtonsPerRow
-            QFileIconListGridLayout.addWidget(QFileIconButton, row, col)
-            QFileIconButton.clicked.connect(lambda checked, f=file: self.setFileIcon(f))
-        
-        QAddFileIconButton = QPushButton(self.QManageFileIconFrame)
-        QAddFileIconButton.setIcon(QIcon(f"resource/img/Root/MaterialSymbolsAddBoxOutline.png"))
-        QAddFileIconButton.setIconSize(QSize(32, 32))
-        QAddFileIconButton.setFixedSize(44, 44)
-        QFileIconListGridLayout.addWidget(QAddFileIconButton, row, col+1)
-        QAddFileIconButton.clicked.connect(self.addNewFileIcon)
-
-        QFileIconListGridLayout.update()
-
-    def setFileIcon(self, file):
-        print(f"Selected file icon: {file}")
-
-    def addNewFileIcon(self):
-        fileName, ok = QInputDialog.getText(self, "添加文件图标", "扩展名（如txt）:")
-        if ok and fileName:
-            filePath, _ = QFileDialog.getOpenFileName(
-                self, "选择图标文件", "", "图片文件 (*.png *.jpg)")
-            if filePath:
-                try:
-                    ext = path.splitext(filePath)[1]
-                    target_path = f"resource/img/{fileName}{ext}"
-                    if path.exists(target_path):
-                        raise FileExistsError
-                    makedirs("resource/img", exist_ok=True)
-                    copyfile(filePath, target_path)
-                    self.loadFileIconList()
-                except Exception as e:
-                    self.showMessage("错误", f"添加失败: {str(e)}")
-
-    def showMessage(self, title, message):
-        msg = StyledMessageBox(self, title, message, ["确定"])
-        msg.exec_()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.dragPosition = event.globalPos() - self.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.LeftButton:
-            newPos = event.globalPos() - self.dragPosition
-            screenRect = QApplication.desktop().screenGeometry()
-            if newPos.x() < 10:
-                newPos.setX(10)
-            if newPos.y() < 10:
-                newPos.setY(10)
-            if newPos.x() + self.width() > screenRect.width() - 10:
-                newPos.setX(screenRect.width() - self.width() - 10)
-            if newPos.y() + self.height() > screenRect.height() - 10:
-                newPos.setY(screenRect.height() - self.height() - 10)
-            self.move(newPos)
-
-
-def getAvailableDrives():
-    drives = []
-    for drive in range(ord('A'), ord('Z')+1):
-        driveName = chr(drive) + ":\\"
-        if path.exists(driveName):
-            drives.append(driveName)
-    return drives
+from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWidgetItem, QMenu, QInputDialog, QMessageBox)
+from CustomizeForm import SidebarWidget, StyledMessageBox, SettingDialog
 
 
 # ====================== 列表项类 ====================
@@ -228,16 +21,40 @@ class FileListWidgetItem(QListWidgetItem):
         self.is_setting = is_setting
         self.setting_type = setting_type
 
-
+def getAvailableDrives():
+    drives = []
+    for drive in range(ord('A'), ord('Z')+1):
+        driveName = chr(drive) + ":\\"
+        if path.exists(driveName):
+            drives.append(driveName)
+    return drives
 # ==================== 主程序 ====================
 class DocumentOrganizer(QWidget):
     def __init__(self):
         super().__init__()
+        try:
+            with open('config.json', 'r', encoding='utf-8') as config_file:
+                config = json.load(config_file)
+                self.width = config.get('window_width')
+                self.height = config.get('window_height') 
+                self.WI = config.get('window_inner_margin_width')
+                self.HI = config.get('window_inner_margin_height')
+                self.Margins = config.get('window_screen_margins')
+        except:
+            self.width = 400
+            self.height = 350
+            self.WI = 12
+            self.HI = 12
+            self.Margins = 10
         self.dragPosition = None
         self.last_char = ""  # 记录上一次输入的字符
         self.current_match_index = 0  # 记录当前匹配项的索引
         self.pinyin_cache = {}  # 缓存拼音转换结果
         self.input_conversion_cache = {}  # 缓存用户输入的转换结果
+
+        self.msgBox = QMessageBox()
+        self.msgBox.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        self.msgBox.setAttribute(Qt.WA_TranslucentBackground)
 
         try:
             with open('config.json', 'r', encoding='utf-8') as config_file:
@@ -250,21 +67,26 @@ class DocumentOrganizer(QWidget):
             
         self.QBackgroundFrame = QFrame(self)
         self.QFileList = QListWidget(self)
+
         self.initUI()
+        self.siderbar = SidebarWidget(self) # TODO 只要绑定self就显示不了
+        print(f"""siderbar: \t {self.siderbar.geometry().x()} \t {self.siderbar.geometry().y()} \t {self.siderbar.geometry().width()} \t {self.siderbar.geometry().height()}\nmain: \t {self.geometry().x()} \t {self.geometry().y()} \t {self.geometry().width()} \t {self.geometry().height()}""")
+        self.siderbar.show()
+
 
     def initUI(self):
         self.setWindowTitle("FileIn")
-        self.resize(400, 300)
+        self.resize(self.width, self.height)
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAcceptDrops(True)
 
         self.QBackgroundFrame.setObjectName('BackgroundFrame')
-        self.QBackgroundFrame.setGeometry(0, 0, 400, 300)
+        self.QBackgroundFrame.setGeometry(0, 0, self.width, self.height)
         self.QBackgroundFrame.mousePressEvent = self.mousePressEvent
         self.QBackgroundFrame.mouseMoveEvent = self.mouseMoveEvent
 
-        self.QFileList.setGeometry(10, 10, 380, 280)
+        self.QFileList.setGeometry(self.WI, self.WI, self.width-self.WI*2, self.height-self.HI*2)
         self.QFileList.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.QFileList.itemDoubleClicked.connect(self.onDoubleClick)  
         self.QFileList.keyPressEvent = self.keyPressEvent
@@ -287,23 +109,29 @@ class DocumentOrganizer(QWidget):
     def onDoubleClick(self, item):
         try:
             selection = item.text()
-            
+
             if hasattr(item, 'is_setting') and item.is_setting:
+                if item.setting_type == "back":
+                    self.loadList()
+                    return
                 self.openSetting(item.setting_type)
                 return
+
             if selection == "Back":
                 self.navigateUp()
                 return
-                
+
             itemPath = path.join(self.DestinationFolder, selection)
-                
+
             if path.isdir(itemPath):
                 self.DestinationFolder = path.abspath(itemPath)
                 self.loadList()
             else:
                 self.safeOpenFile(itemPath)
+
         except Exception as e:
             self.showError("错误", f"打开失败: {str(e)}")
+
 
     def openSetting(self, setting_type):
         dialog = SettingDialog(setting_type)
@@ -328,9 +156,9 @@ class DocumentOrganizer(QWidget):
             try:
                 FileList = listdir(self.DestinationFolder)
                 
-                if FileList:
-                    FileTypeList = [path.splitext(File)[1][1:] for File in FileList]
-                else:
+                if FileList:  # 非空目录
+                    FileTypeList = [path.splitext(File)[1][1:].lower() for File in FileList]
+                else:  # 空目录
                     FileList = ["Back"]
                     FileTypeList = ["folder"]
                 
@@ -354,10 +182,8 @@ class DocumentOrganizer(QWidget):
         item = selectedItems[0]
         FileName = item.text()
 
-        if FileName == "Back":
-            return
             
-        if hasattr(item, 'is_setting') and item.is_setting:
+        if (hasattr(item, 'is_setting') and item.is_setting) or FileName == "Back":
             return
             
         itemPath = path.join(self.DestinationFolder, FileName)
@@ -374,8 +200,27 @@ class DocumentOrganizer(QWidget):
         exitAction = menu.addAction("退出")
         
         action = menu.exec_(self.QFileList.mapToGlobal(pos))
-        
-        if action == renameAction:
+
+        if action == backAction:
+            self.navigateUp()
+
+        elif action == UpdateAction:  # 更新
+            if self.QFileList.item(0).text() == "C:\\":
+                self.loadList(getAvailableDrives())
+            else:
+                self.loadList()
+
+        elif action == OpenFilePathAction:  # 打开所在位置
+            try:
+                if path.isdir(itemPath):  # 目录
+                    startfile(itemPath)
+                else:  # 文件
+                    print(itemPath)
+                    system(f'explorer /select,"{itemPath}"')  # 开启资源管理器并且选中文件
+            except Exception as e:
+                self.showError("错误", f"打开失败: {str(e)}")
+
+        elif action == renameAction:  # 重命名
             newFileName, okFlag = QInputDialog.getText(self, "重命名", "请输入新的名称:")
             if okFlag and newFileName:
                 newPath = path.join(self.DestinationFolder, newFileName)
@@ -384,8 +229,9 @@ class DocumentOrganizer(QWidget):
                     item.setText(newFileName)
                 except Exception as e:
                     self.showError("错误", f"重命名失败: {str(e)}")
-        elif action == deleteAction:
-            answer = QMessageBox.question(self, "确认", "您确定要删除该文件吗？", QMessageBox.Yes | QMessageBox.No)
+
+        elif action == deleteAction:  # 删除
+            answer = self.msgBox.question(self, "确认", "您确定要删除该文件吗？", QMessageBox.Yes | QMessageBox.No)
             if answer == QMessageBox.Yes:
                 try:
                     if path.isdir(itemPath):
@@ -395,37 +241,29 @@ class DocumentOrganizer(QWidget):
                     self.QFileList.takeItem(self.QFileList.row(item))
                 except Exception as e:
                     self.showError("错误", f"删除失败: {str(e)}")
-        elif action == removeAction:
+
+        elif action == removeAction:  # 移出
             try:
-                move(itemPath, "E:\我的文档\Desktop")
+                move(itemPath, Path.home()) # 将文件移入桌面
                 self.loadList()
             except Exception as e:
                 self.showError("Move Error:", str(e))
-        elif action == settingAction:
+
+        elif action == settingAction:  # 打开设置
             self.QFileList.clear()
             general_setting = FileListWidgetItem("常规设置", "", True, "general")
             general_setting.setIcon(QIcon("resource/img/settings.png"))
             self.QFileList.addItem(general_setting)
-
             icon_setting = FileListWidgetItem("图标设置", "", True, "icons")
             icon_setting.setIcon(QIcon("resource/img/icons.png"))
             self.QFileList.addItem(icon_setting)
-
             back_setting = FileListWidgetItem("退出设置", "", True, "back")
             back_setting.setIcon(QIcon("resource/img/icons.png"))
             self.QFileList.addItem(back_setting)
-        elif action == exitAction:
+
+        elif action == exitAction:  # 退出程序
             self.close()
             sys.exit()
-
-        elif action == backAction:
-            self.navigateUp()
-
-        elif action == UpdateAction:
-            if self.QFileList.item(0).text() == "C:\\":
-                self.loadList(getAvailableDrives())
-            else:
-                self.loadList()
 
     def navigateUp(self):  # 导航到上一级目录
         ParentFolder = path.dirname(self.DestinationFolder)
@@ -583,6 +421,7 @@ class DocumentOrganizer(QWidget):
         if modifiers == Qt.ShiftModifier:
             drag_action = Qt.MoveAction
             icon_name = "cut.png"
+            self.loadList()
         else:
             drag_action = Qt.CopyAction
             icon_name = "copy.png"
@@ -637,6 +476,18 @@ class DocumentOrganizer(QWidget):
         except Exception as e:
             self.showError("复制失败", str(e))
 
+    def moveEvent(self, event):
+        """主窗口移动时更新侧边栏位置"""
+        super().moveEvent(event)
+        if self.siderbar.attached_side:  # 如果处于吸附状态
+            self.siderbar.update_position()
+
+    def resizeEvent(self, event):
+        """主窗口调整大小时更新侧边栏位置"""
+        super().resizeEvent(event)
+        if self.siderbar.attached_side:  # 如果处于吸附状态
+            self.siderbar.update_position()
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragPosition = event.globalPos() - self.frameGeometry().topLeft()
@@ -644,17 +495,11 @@ class DocumentOrganizer(QWidget):
 
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.LeftButton:
-            newPos = event.globalPos() - self.dragPosition
-            screenRect = QApplication.desktop().screenGeometry()
-            if newPos.x() < 10:
-                newPos.setX(10)
-            if newPos.y() < 10:
-                newPos.setY(10)
-            if newPos.x() + self.width() > screenRect.width() - 10:
-                newPos.setX(screenRect.width() - self.width() - 10)
-            if newPos.y() + self.height() > screenRect.height() - 10:
-                newPos.setY(screenRect.height() - self.height() - 10)
-            self.move(newPos)
+            delta = event.globalPos() - self.dragPosition
+            screen = QApplication.primaryScreen().availableGeometry()
+            new_x = max(self.Margins, min(delta.x(), screen.width() - self.width - self.Margins))
+            new_y = max(self.Margins, min(delta.y(), screen.height() - self.height - self.Margins))
+            self.move(new_x, new_y)
     
     def safeOpenFile(self, path):
         try:
@@ -669,8 +514,11 @@ class DocumentOrganizer(QWidget):
             self.showError("打开失败", f"错误原因：{str(e)}")
 
     def showError(self, title, message):
+        with open("error.log", "a", encoding="utf-8") as log:
+            log.write(f"{datetime.now()} - {title}: {message}\n")
         msg = StyledMessageBox(self, title, message, ["确定"])
         msg.exec_()
+
 
     def handleDroppedFiles(self, files):
         try:
@@ -686,14 +534,15 @@ class DocumentOrganizer(QWidget):
         except Exception as e:
             self.showError("移动失败", str(e))
 
-
 if __name__ == '__main__':
     try:
         app = QApplication([])
-        with open(".qss", "r", encoding="utf-8") as f:
+        
+        with open("style.qss", "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
         doc = DocumentOrganizer()
         doc.show()
+        
         app.exec_()
     except Exception as e:
         sys.exit(1)
