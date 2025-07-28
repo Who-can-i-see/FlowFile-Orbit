@@ -1,0 +1,46 @@
+QWidget {
+    font-family: '黑体';
+    color: rgb(248,248,255);
+}
+
+#BackgroundFrame {
+    background-color: rgba(0, 0, 0, 100);
+    border-radius: 10px;
+}
+
+QListWidget {
+    background-color: rgba(0, 0, 0, 0);
+    font-size:15px;
+    border: 0px solid transparent;
+    outline: 0px;
+}
+
+QListWidget::item {
+    outline: 0px;
+    border: 0px solid transparent;
+}
+
+QListWidget::focus {
+    outline: 0px;
+    border: 0px solid transparent;
+}
+
+QListWidget::item::selected {
+    background-color: rgba(1,110,255,100);
+    border-radius: 2px;
+}
+
+QMenu {
+    background-color: rgb(0, 0, 0);
+}
+
+QMenu::item {
+    background-color: transparent;
+    padding:8px 10px;/*菜单项文字上下和左右的内边距*/
+    margin:0px 3px;/*菜单项外边距*/
+    border-bottom:1px solid #DBDBDB;
+}
+
+QMenu::item:selected {
+    background-color: rgb(30,144,255);
+}

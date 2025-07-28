@@ -2,14 +2,14 @@ from datetime import datetime
 import pypinyin
 from pypinyin import Style
 import sys
-from os import listdir, path, startfile, makedirs, system, rename, remove, system
+from os import listdir, path, startfile, makedirs, system, rename, remove, system, walk
 from pathlib import Path
 from shutil import copyfile, move, rmtree
 from win32com.client import Dispatch
 import json
 from PyQt5.QtCore import Qt, QPoint, QMimeData, QUrl
 from PyQt5.QtGui import QIcon, QDrag, QPixmap, QPainter
-from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWidgetItem, QMenu, QInputDialog, QMessageBox)
+from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWidgetItem, QMenu, QInputDialog, QMessageBox, QLineEdit, QDialog, QVBoxLayout, QPushButton, QLabel)
 from CustomizeForm import SidebarWidget, StyledMessageBox, SettingDialog
 
 
@@ -51,6 +51,8 @@ class DocumentOrganizer(QWidget):
         self.current_match_index = 0  # 记录当前匹配项的索引
         self.pinyin_cache = {}  # 缓存拼音转换结果
         self.input_conversion_cache = {}  # 缓存用户输入的转换结果
+        self.search_result_paths = []  # 搜索结果路径
+        self.is_search_mode = False  # 是否处于搜索模式
 
         self.msgBox = QMessageBox()
         self.msgBox.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
@@ -69,7 +71,7 @@ class DocumentOrganizer(QWidget):
         self.QFileList = QListWidget(self)
 
         self.initUI()
-        self.siderbar = SidebarWidget(self) # TODO 只要绑定self就显示不了
+        self.siderbar = SidebarWidget() # TODO
         print(f"""siderbar: \t {self.siderbar.geometry().x()} \t {self.siderbar.geometry().y()} \t {self.siderbar.geometry().width()} \t {self.siderbar.geometry().height()}\nmain: \t {self.geometry().x()} \t {self.geometry().y()} \t {self.geometry().width()} \t {self.geometry().height()}""")
         self.siderbar.show()
 
@@ -88,6 +90,7 @@ class DocumentOrganizer(QWidget):
 
         self.QFileList.setGeometry(self.WI, self.WI, self.width-self.WI*2, self.height-self.HI*2)
         self.QFileList.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.QFileList.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.QFileList.itemDoubleClicked.connect(self.onDoubleClick)  
         self.QFileList.keyPressEvent = self.keyPressEvent
         self.QFileList.customContextMenuRequested.connect(self.setting)
@@ -154,7 +157,10 @@ class DocumentOrganizer(QWidget):
                 self.QFileList.item(self.QFileList.count()-1).setIcon(QIcon("resource/img/Root/hdd.png"))
         else:
             try:
-                FileList = listdir(self.DestinationFolder)
+                if self.is_search_mode:
+                    FileList = self.search_result_paths
+                else:
+                    FileList = listdir(self.DestinationFolder)
                 
                 if FileList:  # 非空目录
                     FileTypeList = [path.splitext(File)[1][1:].lower() for File in FileList]
@@ -163,7 +169,11 @@ class DocumentOrganizer(QWidget):
                     FileTypeList = ["folder"]
                 
                 for fileName, fileType in zip(FileList, FileTypeList):
-                    filePath = path.join(self.DestinationFolder, fileName)
+                    if self.is_search_mode is False:  # 搜索模式下不用再次拼接路径
+                        filePath = path.join(self.DestinationFolder, fileName)
+                    else:  # 搜索模式下直接使用文件名
+                        filePath = fileName
+                        fileName = path.basename(filePath)
                     item = FileListWidgetItem(fileName, filePath)
                     icon_path = f"resource/img/{fileType}.png"
                     if path.exists(icon_path):
@@ -171,6 +181,7 @@ class DocumentOrganizer(QWidget):
                     else:
                         item.setIcon(QIcon("resource/img/file.png"))
                     self.QFileList.addItem(item)
+                self.search_result_paths = []  # 搜索模式下清空搜索结果
             except Exception as e:
                 self.showError("错误", f"无法读取目录: {str(e)}")
 
@@ -202,13 +213,18 @@ class DocumentOrganizer(QWidget):
         action = menu.exec_(self.QFileList.mapToGlobal(pos))
 
         if action == backAction:
-            self.navigateUp()
+            if self.is_searh_mode:
+                self.is_search_mode = False
+                self.loadList()
+            else:
+                self.navigateUp()
 
         elif action == UpdateAction:  # 更新
             if self.QFileList.item(0).text() == "C:\\":
                 self.loadList(getAvailableDrives())
             else:
                 self.loadList()
+            self.is_search_mode = False
 
         elif action == OpenFilePathAction:  # 打开所在位置
             try:
@@ -274,8 +290,15 @@ class DocumentOrganizer(QWidget):
             self.loadList()
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Slash:  # "/" 键
+            self.showSearchDialog()
+            return
         if event.key() == Qt.Key_Escape:
-            self.navigateUp()
+            if self.is_search_mode:
+                self.is_search_mode = False
+                self.loadList()
+            else:
+                self.navigateUp()
         elif event.key() == Qt.Key_Down:
             current_row = self.QFileList.currentRow()
             if self.QFileList.count() == 0:
@@ -476,18 +499,6 @@ class DocumentOrganizer(QWidget):
         except Exception as e:
             self.showError("复制失败", str(e))
 
-    def moveEvent(self, event):
-        """主窗口移动时更新侧边栏位置"""
-        super().moveEvent(event)
-        if self.siderbar.attached_side:  # 如果处于吸附状态
-            self.siderbar.update_position()
-
-    def resizeEvent(self, event):
-        """主窗口调整大小时更新侧边栏位置"""
-        super().resizeEvent(event)
-        if self.siderbar.attached_side:  # 如果处于吸附状态
-            self.siderbar.update_position()
-
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragPosition = event.globalPos() - self.frameGeometry().topLeft()
@@ -533,6 +544,62 @@ class DocumentOrganizer(QWidget):
             self.loadList()
         except Exception as e:
             self.showError("移动失败", str(e))
+
+    def showSearchDialog(self):
+        dialog = SearchDialog(self)
+        # 右下角显示
+        geo = self.geometry()
+        dialog.move(geo.x() + geo.width() - dialog.width() - 20, geo.y() + geo.height() - dialog.height() - 20)
+        keyword = dialog.getText()
+        if keyword:
+            self.showSearchResult(keyword)
+
+    def showSearchResult(self, keyword):
+        self.QFileList.clear()
+        self.search_result_paths = []
+        for root, dirs, files in walk(self.DestinationFolder):
+            for file in files:
+                if keyword.lower() in file.lower():
+                    full_path = path.join(root, file)
+                    self.search_result_paths.append(full_path)
+        self.is_search_mode = True
+        self.loadList()
+
+class SearchDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(320, 60)
+        layout = QVBoxLayout(self)
+        self.edit = QLineEdit(self)
+        layout.addWidget(self.edit)
+        self.edit.returnPressed.connect(self.accept)
+        self.edit.installEventFilter(self)  # 捕获回车键
+        self.result = None
+
+        self.edit.setStyleSheet("""
+            QLineEdit {
+                background-color: rgba(255, 255, 255);
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                color: #000;
+                font-size: 16px;
+                font-family: '思源黑体;
+            }
+        """)
+
+    def eventFilter(self, obj, event):
+        if obj == self.edit and event.type() == event.KeyPress:
+            if event.key() == Qt.Key_Escape:
+                self.reject()
+                return True
+        return super().eventFilter(obj, event)
+
+    def getText(self):
+        if self.exec_() == QDialog.Accepted:
+            return self.edit.text()
+        return None
 
 if __name__ == '__main__':
     try:

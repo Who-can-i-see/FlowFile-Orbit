@@ -1,4 +1,3 @@
-# sidebar_widget.py
 import sys
 from os import listdir, path, makedirs
 from shutil import copyfile
@@ -8,16 +7,11 @@ from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon
 
 class SidebarWidget(QFrame):
-    def __init__(self, main_window=None):
-        super().__init__(main_window)  # 设置为子窗口，简化管理
-        self.main_window = main_window
-        
-        # 设置样式和标志
+    def __init__(self):
+        super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.attachbarFrame = QFrame(self)
-        self.attachbarFrame.setFixedWidth(200)
-        self.attachbarFrame.setFixedHeight(60)
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 50, 50, 100);
@@ -25,44 +19,12 @@ class SidebarWidget(QFrame):
             }
         """)
         
-        # 吸附配置
-        self.attached_side = 'right'  # 默认吸附在右侧
-        self.attached_offset = 0      # 垂直偏移量
-        self.attachment_threshold = 20  # 吸附距离阈值
-        
-        # 初始位置
-        self.update_position()
-        
-    def update_position(self):
-        """根据吸附状态更新位置"""
-        if not self.main_window:
-            return
-            
-        main_geo = self.main_window.geometry()
-        print(1)
-        
-        if self.attached_side == 'left':
-            self.move(main_geo.left() - self.width(), 
-                     main_geo.top() + self.attached_offset)
-        elif self.attached_side == 'right':
-            self.move(main_geo.right(), 
-                     main_geo.top() + self.attached_offset)
-        elif self.attached_side == 'top':
-            self.move(main_geo.left() + self.attached_offset, 
-                     main_geo.top() - self.height())
-        elif self.attached_side == 'bottom':
-            self.move(main_geo.left() + self.attached_offset, 
-                     main_geo.bottom())
-    
     def mousePressEvent(self, event):
-        """鼠标按下时解除吸附状态"""
         if event.button() == Qt.LeftButton:
             self.drag_position = event.globalPos() - self.pos()
-            self.attached_side = None  # 拖动时解除吸附
             event.accept()
     
     def mouseMoveEvent(self, event):
-        """鼠标移动时处理拖动"""
         if event.buttons() == Qt.LeftButton and hasattr(self, 'drag_position'):
             new_pos = event.globalPos() - self.drag_position
             
@@ -73,49 +35,6 @@ class SidebarWidget(QFrame):
             
             self.move(new_pos)
             event.accept()
-    
-    def mouseReleaseEvent(self, event):
-        """鼠标释放时检查是否需要吸附"""
-        if event.button() == Qt.LeftButton:
-            self.check_attachment()
-            event.accept()
-    
-    def check_attachment(self):
-        """检查是否需要吸附到主窗口"""
-        if not self.main_window:
-            return
-            
-        main_geo = self.main_window.geometry()
-        sidebar_geo = self.geometry()
-        
-        # 计算与主窗口各边的距离
-        distances = {
-            'left': abs(sidebar_geo.right() - main_geo.left()),
-            'right': abs(sidebar_geo.left() - main_geo.right()),
-            'top': abs(sidebar_geo.bottom() - main_geo.top()),
-            'bottom': abs(sidebar_geo.top() - main_geo.bottom())
-        }
-        
-        # 找到最近的边
-        min_side = min(distances, key=distances.get)
-        
-        # 如果距离在阈值内，则吸附
-        if distances[min_side] < self.attachment_threshold:
-            self.attached_side = min_side
-            self.attached_offset = sidebar_geo.top() - main_geo.top()
-            self.update_position()
-            
-            # 添加吸附动画效果
-            self.setStyleSheet("""
-                background: rgba(255, 50, 50, 150);
-                border: 2px solid white;
-                border-radius: 8px;
-            """)
-            QTimer.singleShot(300, lambda: self.setStyleSheet("""
-                background: rgba(255, 50, 50, 100);
-                border-radius: 8px;
-            """))
-
 
 # ==================== 自定义样式弹窗 ====================
 class StyledMessageBox(QDialog):
