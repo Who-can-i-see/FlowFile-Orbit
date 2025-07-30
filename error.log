@@ -1,6 +1,1 @@
-2025-07-28 14:46:57.199853 - 错误: 无法读取目录: 'DocumentOrganizer' object has no attribute 'in_search_mode'
-2025-07-28 14:47:59.771203 - 错误: 无法读取目录: 'DocumentOrganizer' object has no attribute 'in_search_mode'
-2025-07-28 14:50:01.953234 - 错误: 无法读取目录: 'DocumentOrganizer' object has no attribute 'in_search_mode'
-2025-07-28 14:50:28.354636 - 错误: 无法读取目录: 'DocumentOrganizer' object has no attribute 'is_search_mode'
-2025-07-28 14:51:07.714306 - 错误: 无法读取目录: 'DocumentOrganizer' object has no attribute 'is_search_mode'
-2025-07-28 15:03:23.844841 - 错误: 无法读取目录: local variable 'filePath' referenced before assignment
+2025-07-30 17:25:11.322562 - 复制失败: 'E://启动器/RGSM.lnk' and 'E:\\\\启动器\\RGSM.lnk' are the same file

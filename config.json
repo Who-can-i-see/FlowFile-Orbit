@@ -1,1 +1,26 @@
-{"RootFolder": "E:\\\\\u542f\u52a8\u5668", "window_width": 400, "window_height": 400, "window_inner_margin_width": 12, "window_inner_margin_height": 12, "window_screen_margins": 10}
+{
+    "window": {
+        "width": 400,
+        "height": 400,
+        "inner_margin_width": 12,
+        "inner_margin_height": 12,
+        "screen_margins": 10
+    },
+    "sidebar": {
+        "position": {
+            "x": 800,
+            "y": 300,
+            "adsorbed_edge": null
+        },
+        "custom_buttons": [],
+        "settings": {
+            "use_builtin_icons": false,
+            "show_pinned_button": true,
+            "show_separator": true,
+            "button_spacing": 10
+        }
+    },
+    "RootFolder": "E:\\\\\u542f\u52a8\u5668",
+    "sidebar_items": [
+    ]
+}

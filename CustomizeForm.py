@@ -1,40 +1,9 @@
-import sys
 from os import listdir, path, makedirs
 from shutil import copyfile
 import json
-from PyQt5.QtWidgets import (QApplication, QWidget, QFrame, QInputDialog, QLineEdit, QPushButton, QDialog, QGridLayout, QFileDialog, QLabel, QVBoxLayout, QMessageBox, QDesktopWidget)
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtWidgets import (QFrame, QCheckBox, QInputDialog, QLineEdit, QPushButton, QDialog, QGridLayout, QFileDialog, QLabel, QVBoxLayout, QMessageBox)
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon
-
-class SidebarWidget(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.attachbarFrame = QFrame(self)
-        self.setStyleSheet("""
-            QFrame {
-                background: rgba(255, 50, 50, 100);
-                border-radius: 8px;
-            }
-        """)
-        
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drag_position = event.globalPos() - self.pos()
-            event.accept()
-    
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.LeftButton and hasattr(self, 'drag_position'):
-            new_pos = event.globalPos() - self.drag_position
-            
-            # 确保不会移出屏幕
-            screen_rect = self.screen().availableGeometry()
-            new_pos.setX(max(0, min(new_pos.x(), screen_rect.width() - self.width())))
-            new_pos.setY(max(0, min(new_pos.y(), screen_rect.height() - self.height())))
-            
-            self.move(new_pos)
-            event.accept()
 
 # ==================== 自定义样式弹窗 ====================
 class StyledMessageBox(QDialog):
@@ -187,6 +156,27 @@ class SettingDialog(QDialog):
         self.QManageFileIconFrame.setStyleSheet('''background-color: rgb(41, 57, 85, 100);border-radius: 10px;''')
         self.loadFileIconList()
 
+        # 添加内置图标设置选项
+        self.useBuiltinIconCheck = QCheckBox("使用软件内置图标", self)
+        self.useBuiltinIconCheck.setGeometry(10, 450, 200, 30)
+        self.useBuiltinIconCheck.setChecked(self.config.get('use_builtin_icons', False))
+        self.useBuiltinIconCheck.stateChanged.connect(self.toggle_builtin_icons)
+
+    def toggle_builtin_icons(self, state):
+        """切换内置图标设置"""
+        self.config['use_builtin_icons'] = (state == Qt.Checked)
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, indent=4)
+        self.parent().sidebar.update_custom_buttons()
+
+    def restore_sidebar_defaults(self):
+        """恢复默认侧边栏按钮"""
+        self.config['sidebar_items'] = []
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, indent=4)
+        self.parent().sidebar.update_custom_buttons()
+        QMessageBox.information(self, "成功", "已恢复默认侧边栏按钮")
+
     def save(self):
         RootFolder = f"{self.QRootFolderEdit.text()}"
         if not path.exists(RootFolder):
@@ -276,10 +266,3 @@ class SettingDialog(QDialog):
         if event.buttons() == Qt.LeftButton:
             delta = event.globalPos() - self.dragPosition
             self.move(delta.x(), delta.y())
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    sidebar = SidebarWidget()
-    sidebar.show()
-    sys.exit(app.exec_())

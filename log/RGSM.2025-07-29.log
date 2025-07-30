@@ -1,0 +1,6 @@
+2025-07-29T14:31:14.7501261+08:00  INFO rusty_game_save_manager: 你好 世界
+2025-07-29T14:31:18.135448+08:00  INFO rgsm::quick_action::timer: Setting up tray timer.
+2025-07-29T14:31:18.4412295+08:00  INFO rgsm::quick_action::timer: Tray timer setup complete.
+2025-07-29T14:31:18.4413472+08:00  INFO rgsm::quick_action::hotkeys: Setting up hotkeys
+2025-07-29T14:31:18.5417739+08:00  INFO rgsm::quick_action::hotkeys: All hotkey are registered.
+2025-07-29T14:32:35.8451535+08:00  INFO rgsm::quick_action::tray: Tray quit clicked.
