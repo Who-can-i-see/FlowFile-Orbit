@@ -1,0 +1,2 @@
+nuitka --standalone --show-progress --enable-plugin=pyqt5 --include-package-data=pypinyin --include-package=win32com --include-data-dir=resource=resource --include-data-file=style.qss=style.qss --include-data-file=config.json=config.json --include-data-file=favicon.ico=favicon.ico --windows-icon-from-ico=favicon.ico --output-dir=out1 --windows-disable-console --remove-output main.pyw
+pause
