@@ -1,5 +1,5 @@
 from os import path
-from PyQt5.QtWidgets import QDialog, QFrame, QLabel, QPushButton, QVBoxLayout
+from PyQt5.QtWidgets import QDialog, QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QScrollArea, QWidget
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon
 
@@ -8,28 +8,132 @@ class StyledMessageBox(QDialog):
         super().__init__(parent)
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Main container
         self.TipWindow = QFrame(self)
         self.setStyleSheet('''
-            QFrame { background: rgba(50, 50, 50, 220); border-radius: 10px; }
-            QLabel { color: white; background: transparent; font: 18px "黑体"; }
-            QPushButton { background: rgb(70, 70, 70); color: white; font: 14px "黑体"; border-radius: 5px; padding: 8px 20px; min-width: 80px; }
-            QPushButton:hover { background: rgb(90, 90, 90); }
+            QFrame { 
+                background: rgba(45, 45, 45, 240);
+                border-radius: 3px; 
+            }
+            QLabel { 
+                color: white; 
+                background: transparent; 
+                font: 15px "黑体"; 
+                padding: 0 15px;
+            }
+            QLabel#title {
+                font: bold 18px '黑体'; 
+                padding: 15px 15px 10px 15px;
+            }
+            QPushButton { 
+                background: rgb(80, 80, 80); 
+                color: white; 
+                font: 14px "黑体"; 
+                border-radius: 5px; 
+                padding: 8px 25px; 
+                min-width: 90px; 
+                margin: 5px 10px;
+            }
+            QPushButton:hover { 
+                background: rgb(100, 100, 100); 
+            }
+            QPushButton:pressed {
+                background: rgb(60, 60, 60);
+            }
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background: rgba(60, 60, 60, 150);
+                width: 10px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(100, 100, 100, 200);
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                background: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
         ''')
-        layout = QVBoxLayout()
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font: bold 18px '微软雅黑';")
-        layout.addWidget(title_label)
-        message_label = QLabel(message)
-        layout.addWidget(message_label)
-        btn_layout = QVBoxLayout()
+        
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # Title
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("title")
+        self.title_label.setAlignment(Qt.AlignLeft)
+        main_layout.addWidget(self.title_label, stretch=0)
+        
+        # Scroll area for message content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Message content container
+        content_widget = QWidget()
+        content_widget.setObjectName("content")
+        content_widget.setStyleSheet("QWidget#content { background: transparent; }")
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 10, 0)  # Right margin for scrollbar
+        
+        self.message_label = QLabel(message)
+        self.message_label.setWordWrap(True)
+        self.message_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        content_layout.addWidget(self.message_label)
+        
+        scroll_area.setWidget(content_widget)
+        main_layout.addWidget(scroll_area, stretch=1)
+        
+        # Buttons layout
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(15, 10, 15, 15)
+        btn_layout.setSpacing(15)
+        
         for btn_text in buttons:
             btn = QPushButton(btn_text)
             btn.clicked.connect(lambda _, t=btn_text: self.done(buttons.index(t)+1))
             btn_layout.addWidget(btn)
-        layout.addLayout(btn_layout)
-        self.setLayout(layout)
-        self.TipWindow.setGeometry(0, 0, title_label.width(), 150)
-        self.resize(300, 150)
+        
+        main_layout.addLayout(btn_layout)
+        
+        self.TipWindow.setLayout(main_layout)
+        self.resize(450, 460)  # Larger default size
+        
+        # Make window draggable
+        self.oldPos = None
+        self.TipWindow.mousePressEvent = self.windowMousePressEvent
+        self.TipWindow.mouseMoveEvent = self.windowMouseMoveEvent
+        self.title_label.mousePressEvent = self.titleMousePressEvent
+        self.message_label.keyPressEvent = self.titleMousePressEvent
+        self.message_label.setFocus(True)
+
+    def titleMousePressEvent(self, event):
+        self.close()
+
+    def windowMousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.oldPos = event.globalPos()
+    
+    def windowMouseMoveEvent(self, event):
+        if self.oldPos:
+            delta = QPoint(event.globalPos() - self.oldPos)
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.oldPos = event.globalPos()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.close()
 
 # ====================== 侧边栏类 ====================
 class SidebarWidget(QFrame):

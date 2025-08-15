@@ -592,6 +592,23 @@ class DocumentOrganizer(QWidget):
         elif action == exitAction:
             self.close()
 
+    def execute_command(self, command):
+        try:
+            process = subprocess.Popen(
+                f"chcp 65001>null && del null && cd {self.DestinationFolder} && {command}",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )  # 在当前目录执行命令
+            stdout, stderr = process.communicate()
+            # 如果有输出，弹出对话框显示
+            if stdout or stderr:
+                self.showError("命令执行结果", f"执行命令成功，退出代码：{process.returncode}\n\n{stdout.decode()}\n\n{stderr.decode()}")
+        except Exception as e:
+            self.showError("错误", f"执行命令失败: {str(e)}")
+        except Exception as e:
+            self.showError("错误", f"执行命令失败: {str(e)}")
+
     def showSearchResult(self, keyword):
         """显示搜索结果"""
         self.QFileList.clear()
@@ -623,13 +640,16 @@ class DocumentOrganizer(QWidget):
         
         keyword = dialog.getText()
         if keyword is not None:
-            self.showSearchResult(keyword)
+            if keyword[0] == "/":
+                keyword = keyword[1:]
+                self.execute_command(keyword)
+            else:
+                self.showSearchResult(keyword)
 
     def showError(self, title, message):
         """显示错误消息"""
-        msg = StyledMessageBox()
+        msg = StyledMessageBox(self, title, message)
         msg.setWindowTitle(title)
-        msg.setText(message)
         msg.exec_()
 
 class SearchDialog(QDialog):
@@ -652,7 +672,7 @@ class SearchDialog(QDialog):
             QLineEdit { 
                 background-color: rgba(255, 255, 255, 200); 
                 border-radius: 5px;
-                border: 3px solid rgba(1,110,255,100);
+                border: 0px solid rgba(1,110,255,100);
                 color: #000; 
                 font-size: 16px; 
                 font-family: '黑体'; 
@@ -667,7 +687,7 @@ class SearchDialog(QDialog):
         return super().eventFilter(obj, event)
     
     def getText(self):
-        if self.exec_() == QDialog.Accepted:
+        if self.exec_() == QDialog.Accepted: # 点击确定按钮
             return self.edit.text()
         return None
 
