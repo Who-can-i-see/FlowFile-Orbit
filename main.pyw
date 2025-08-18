@@ -563,7 +563,11 @@ class DocumentOrganizer(QWidget):
         exitAction = menu.addAction("退出")
         action = menu.exec_(self.QFileList.mapToGlobal(pos))
         if action == backAction:
-            self.navigateUp()
+            if self.is_search_mode:
+                self.is_search_mode = False
+                self.loadList()
+            else:
+                self.navigateUp()
         elif action == UpdateAction:
             self.loadList()
         elif action == OpenFilePathAction:
