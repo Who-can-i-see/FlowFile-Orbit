@@ -14,6 +14,8 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWi
                              QMenu, QInputDialog, QMessageBox, QLineEdit, QDialog, 
                              QVBoxLayout)
 from CustomizeForm import StyledMessageBox, SidebarWidget
+from load_extensions import load_extensions
+
 
 # ====================== 列表项类 ====================
 class FileListWidgetItem(QListWidgetItem):
@@ -45,6 +47,7 @@ class DocumentOrganizer(QWidget):
         self.dragPosition = None
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.last_char = ""
+        self.selectedItem = None
         self.current_match_index = 0
         self.pinyin_cache = {}
         self.input_conversion_cache = {}
@@ -58,6 +61,7 @@ class DocumentOrganizer(QWidget):
         self.QBackgroundFrame= QFrame(self)
         self.QFileList = QListWidget(self)
         self.sidebar = SidebarWidget(self)
+        self.menu = QMenu(self)
         self.sidebar.pin_state_changed.connect(self.handle_pin_state)
         self.initUI()
         self.restore_window_position()
@@ -96,6 +100,21 @@ class DocumentOrganizer(QWidget):
                 self.setStyleSheet(f.read())
         except Exception as e:
             pass
+
+    def enabled_extensions(self):
+        self.selectedItem = self.QFileList.selectedItems()
+        extensions = load_extensions()
+
+        for extension in extensions:
+            if extension['location'] == 'Sidebar':  # 侧边栏扩展
+                # 侧边栏添加新按钮
+                pass
+            else:  # 菜单扩展
+                # 菜单添加新选项
+                self.menu.addAction(
+                    extension['name'], 
+                    lambda: subprocess.Popen(f"{extensions['script_path']} -c {self.selectedItem}", shell=True, cwd=self.DestinationFolder)
+                    )
 
     def save_window_position(self):
         """保存主窗体绝对位置和侧边栏相对位置到配置文件"""
@@ -509,15 +528,16 @@ class DocumentOrganizer(QWidget):
                 self.sidebar.move(sidebar_new_pos)
             event.accept()
     
-    def safeOpenFile(self, path):
+    def safeOpenFile(self, file_path):
         try:
-            if path.lower().endswith('.lnk'):
+            if file_path.lower().endswith('.lnk'):
                 shell = Dispatch('WScript.Shell')
-                shortcut = shell.CreateShortCut(path)
+                shortcut = shell.CreateShortCut(file_path)
                 actual_path = shortcut.TargetPath
-                startfile(actual_path)
+                print(f'start "{actual_path}"')
+                subprocess.Popen(path.basename(actual_path), shell=True, cwd=path.dirname(actual_path))
             else:
-                startfile(path)
+                startfile(file_path)
         except Exception as e:
             self.showError("打开失败", f"错误原因：{str(e)}")
     
@@ -544,24 +564,24 @@ class DocumentOrganizer(QWidget):
             self.showError("移动失败", str(e))
     
     def setting(self, pos):
-        selectedItems = self.QFileList.selectedItems()
-        if not selectedItems:
+        self.menu.clear()
+        self.selectedItem = self.QFileList.selectedItems()
+        if not self.selectedItem:
             return
-        item = selectedItems[0]
+        item = self.selectedItem[0]
         FileName = item.text()
         if (hasattr(item, 'is_setting') and item.is_setting) or FileName == "Back":
             return
         itemPath = path.join(self.DestinationFolder, FileName) if not self.is_search_mode else item.file_path
-        menu = QMenu(self)
-        menu.setWindowOpacity(0.7843137)
-        backAction = menu.addAction("返回上一目录")
-        UpdateAction = menu.addAction("更新")
-        OpenFilePathAction = menu.addAction("打开所在位置")
-        renameAction = menu.addAction("重命名")
-        deleteAction = menu.addAction("删除")
-        removeAction = menu.addAction("移出")
-        exitAction = menu.addAction("退出")
-        action = menu.exec_(self.QFileList.mapToGlobal(pos))
+        self.menu.setWindowOpacity(0.7843137)
+        backAction = self.menu.addAction("返回上一目录")
+        UpdateAction = self.menu.addAction("更新")
+        OpenFilePathAction = self.menu.addAction("打开所在位置")
+        renameAction = self.menu.addAction("重命名")
+        deleteAction = self.menu.addAction("删除")
+        removeAction = self.menu.addAction("移出")
+        exitAction = self.menu.addAction("退出")
+        action = self.menu.exec_(self.QFileList.mapToGlobal(pos))
         if action == backAction:
             if self.is_search_mode:
                 self.is_search_mode = False
@@ -599,8 +619,10 @@ class DocumentOrganizer(QWidget):
     def execute_command(self, command):
         try:
             process = subprocess.Popen(
-                f"chcp 65001>null && del null && cd {self.DestinationFolder} && {command}",
+                command,
                 shell=True,
+                cwd=self.DestinationFolder,
+                encoding="utf-8",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )  # 在当前目录执行命令
