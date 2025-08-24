@@ -41,9 +41,12 @@ class DocumentOrganizer(QWidget):
         self.WI = self.config['window']['inner_margin_width']
         self.HI = self.config['window']['inner_margin_height']
         self.Margins = self.config['window']['screen_margins']
+        self.marks = dict()
+        [self.marks.update({int(item): value}) for item, value in self.config['marks'].items()]
+
+        print(self.marks)
         print(f'初始化配置中...')
         print(f'主窗口宽度: {self.width} \n高度: {self.height} \n内边距宽度: {self.WI} \n内边距高度: {self.HI} \n屏幕边距: {self.Margins}')
-        self.oI = 5
         self.dragPosition = None
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.last_char = ""
@@ -53,6 +56,8 @@ class DocumentOrganizer(QWidget):
         self.input_conversion_cache = {}
         self.search_result_paths = []
         self.is_search_mode = False
+        self.is_wait_mode = False
+        self.is_wait_write_mark_mode = False
         self.msgBox = QMessageBox()
         self.msgBox.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.msgBox.setAttribute(Qt.WA_TranslucentBackground)
@@ -94,6 +99,7 @@ class DocumentOrganizer(QWidget):
         self.QFileList.startDrag = self.startDrag
         
         self.loadList()
+        self.restore_window_position()
         
         try:
             with open(".qss", "r", encoding="utf-8") as f:
@@ -278,55 +284,78 @@ class DocumentOrganizer(QWidget):
             self.loadList()
     
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Slash:  # "/" 键
-            self.showSearchDialog()
-            return
-            
-        if event.key() == Qt.Key_Escape:
-            if self.is_search_mode:
-                self.is_search_mode = False
+        print(event.key())
+        if self.is_wait_mode:
+            if event.key() in self.marks:  # 按下标记则跳转到指定目录
+                self.DestinationFolder = self.marks[event.key()]
                 self.loadList()
-            else:
-                self.navigateUp()
-        elif event.key() == Qt.Key_Down:
-            current_row = self.QFileList.currentRow()
-            if self.QFileList.count() == 0:
-                return
-            if current_row == self.QFileList.count() - 1:
-                self.QFileList.setCurrentRow(0)
-            else:
-                self.QFileList.setCurrentRow(current_row + 1)
-        elif event.key() == Qt.Key_Up:
-            current_row = self.QFileList.currentRow()
-            if self.QFileList.count() == 0:
-                return
-            if current_row == 0:
-                self.QFileList.setCurrentRow(self.QFileList.count() - 1)
-            else:
-                self.QFileList.setCurrentRow(current_row - 1)
-        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            current_item = self.QFileList.currentItem() if self.QFileList.currentItem() else None
-            if current_item:
-                self.onDoubleClick(current_item)
-        elif event.text():  # 支持所有可打印字符
-            input_char = event.text()[0]  # 只取第一个字符
-            
-            # 将用户输入转换为拼音首字母
-            converted_char = self.convert_char_to_pinyin(input_char)
-            
-            # 如果输入了新字符，重置匹配索引
-            if converted_char != self.last_char:
-                self.last_char = converted_char
-                self.current_match_index = 0
-            else:
-                # 如果输入相同字符，增加索引以循环匹配
-                self.current_match_index += 1
-                
-            # 查找匹配项
-            self.find_matching_item(converted_char)
+            else:  # 如果没有标记, 则标记
+                if not self.is_wait_write_mark_mode:  # 如果镌刻书签模式，则记录到配置文件
+                    self.marks[event.key()] = self.DestinationFolder
+                    self.showError("提示", f"已标记{event.key()}")
+                else: 
+                    self.marks[event.key()] = self.DestinationFolder  # 记录当前目录为标记
+                    self.config["marks"][event.key()] = self.DestinationFolder  # 记录到配置文件
+                    with open('config.json', 'w', encoding='utf-8') as f:
+                        json.dump(self.config, f, indent=4)
+                        self.showError("提示", f"已镌刻{event.key()}")
+            self.is_wait_mode = False  # 退出等待模式
+            self.is_wait_write_mark_mode = False  # 退出等待镌刻书签模式
         else:
-            super().keyPressEvent(event)
-    
+            if event.key() == Qt.Key_Slash:  # "/" 键
+                self.showSearchDialog()
+                return
+            elif event.key() == Qt.Key_M:  # "M" 键
+                self.is_wait_mode = True  # 进入等待模式
+                self.is_wait_write_mark_mode = True  # 进入等待镌刻书签模式
+            elif event.key() == 39:  # "'" 键
+                self.is_wait_mode = True  # 进入等待模式
+
+            elif event.key() == Qt.Key_Escape:
+                if self.is_search_mode:
+                    self.is_search_mode = False
+                    self.loadList()
+                else:
+                    self.navigateUp()
+            elif event.key() == Qt.Key_Down:
+                current_row = self.QFileList.currentRow()
+                if self.QFileList.count() == 0:
+                    return
+                if current_row == self.QFileList.count() - 1:
+                    self.QFileList.setCurrentRow(0)
+                else:
+                    self.QFileList.setCurrentRow(current_row + 1)
+            elif event.key() == Qt.Key_Up:
+                current_row = self.QFileList.currentRow()
+                if self.QFileList.count() == 0:
+                    return
+                if current_row == 0:
+                    self.QFileList.setCurrentRow(self.QFileList.count() - 1)
+                else:
+                    self.QFileList.setCurrentRow(current_row - 1)
+            elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+                current_item = self.QFileList.currentItem() if self.QFileList.currentItem() else None
+                if current_item:
+                    self.onDoubleClick(current_item)
+            elif event.text():  # 支持所有可打印字符
+                input_char = event.text()[0]  # 只取第一个字符
+
+                # 将用户输入转换为拼音首字母
+                converted_char = self.convert_char_to_pinyin(input_char)
+
+                # 如果输入了新字符，重置匹配索引
+                if converted_char != self.last_char:
+                    self.last_char = converted_char
+                    self.current_match_index = 0
+                else:
+                    # 如果输入相同字符，增加索引以循环匹配
+                    self.current_match_index += 1
+
+                # 查找匹配项
+                self.find_matching_item(converted_char)
+            else:
+                super().keyPressEvent(event)
+
     def convert_char_to_pinyin(self, char):
         """将单个字符转换为拼音首字母"""
         if not char:
@@ -520,7 +549,7 @@ class DocumentOrganizer(QWidget):
         if event.buttons() == Qt.LeftButton:
             delta = event.globalPos() - self.dragPosition
             new_x = max(self.Margins, min(delta.x(), self.screen.width() - self.width - self.Margins))
-            new_y = max(self.Margins, min(delta.y(), self.screen.height() -self.height - self.Margins))
+            new_y = max(self.Margins, min(delta.y(), self.screen.height() - self.height - self.Margins))
             self.move(new_x, new_y)
             # 侧边栏跟随主窗体移动
             if hasattr(self, 'sidebar'):
@@ -563,6 +592,41 @@ class DocumentOrganizer(QWidget):
         except Exception as e:
             self.showError("移动失败", str(e))
     
+    def save_window_position(self):
+        """保存主窗体绝对位置和侧边栏相对位置到配置文件"""
+        self.config['window_position'] = {
+            'x': self.pos().x(),
+            'y': self.pos().y()
+        }
+        if hasattr(self, 'sidebar'):
+            self.config['sidebar_relative_x'] = self.sidebar.relative_offset.x()
+            self.config['sidebar_relative_y'] = self.sidebar.relative_offset.y()
+        self.config['RootFolder'] = self.DestinationFolder
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, indent=4)
+
+    def restore_window_position(self):
+        """恢复主窗体绝对位置和侧边栏相对位置"""
+        try:
+            # 恢复主窗体位置
+            if 'window_position' in self.config:
+                pos = self.config['window_position']
+                self.move(pos['x'], pos['y'])
+                print(f"恢复主窗体位置: ({pos['x']}, {pos['y']})")
+            # 恢复侧边栏相对位置
+            if hasattr(self, 'sidebar'):
+                rel_x = self.config.get('sidebar_relative_x', None)
+                rel_y = self.config.get('sidebar_relative_y', None)
+                if rel_x is not None and rel_y is not None:
+                    self.sidebar.relative_offset = QPoint(rel_x, rel_y)
+                else:
+                    # 默认放在主窗体右侧，间距20
+                    self.sidebar.relative_offset = QPoint(self.width + 20, 0)
+                new_pos = self.pos() + self.sidebar.relative_offset
+                self.sidebar.move(new_pos)
+        except Exception as e:
+            print(f"恢复窗口和侧边栏位置失败: {e}")
+    
     def setting(self, pos):
         self.menu.clear()
         self.selectedItem = self.QFileList.selectedItems()
@@ -579,7 +643,6 @@ class DocumentOrganizer(QWidget):
         OpenFilePathAction = self.menu.addAction("打开所在位置")
         renameAction = self.menu.addAction("重命名")
         deleteAction = self.menu.addAction("删除")
-        removeAction = self.menu.addAction("移出")
         exitAction = self.menu.addAction("退出")
         action = self.menu.exec_(self.QFileList.mapToGlobal(pos))
         if action == backAction:
@@ -610,11 +673,10 @@ class DocumentOrganizer(QWidget):
                 self.loadList()
             except Exception as e:
                 self.showError("错误", f"删除失败: {str(e)}")
-        elif action == removeAction:
-            # 这里可自定义移出逻辑
-            pass
         elif action == exitAction:
             self.close()
+            self.save_window_position()
+            sys.exit(0)
 
     def execute_command(self, command):
         try:
