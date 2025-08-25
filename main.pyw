@@ -9,10 +9,10 @@ from shutil import copyfile, move, rmtree
 from win32com.client import Dispatch
 import json
 from PyQt5.QtCore import Qt, QPoint, QMimeData, QUrl
-from PyQt5.QtGui import QIcon, QDrag, QPixmap, QPainter
+from PyQt5.QtGui import QColor, QIcon, QDrag, QPixmap, QPainter
 from PyQt5.QtWidgets import (QApplication, QWidget, QListWidget, QFrame, QListWidgetItem, 
                              QMenu, QInputDialog, QMessageBox, QLineEdit, QDialog, 
-                             QVBoxLayout)
+                             QVBoxLayout, QAbstractItemView)
 from CustomizeForm import StyledMessageBox, SidebarWidget
 from load_extensions import load_extensions
 
@@ -43,13 +43,12 @@ class DocumentOrganizer(QWidget):
         self.Margins = self.config['window']['screen_margins']
         self.marks = dict()
         [self.marks.update({int(item): value}) for item, value in self.config['marks'].items()]
-
-        print(self.marks)
         print(f'初始化配置中...')
         print(f'主窗口宽度: {self.width} \n高度: {self.height} \n内边距宽度: {self.WI} \n内边距高度: {self.HI} \n屏幕边距: {self.Margins}')
         self.dragPosition = None
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.last_char = ""
+        self.copied_files = []
         self.selectedItem = None
         self.current_match_index = 0
         self.pinyin_cache = {}
@@ -97,6 +96,7 @@ class DocumentOrganizer(QWidget):
         self.QFileList.setDefaultDropAction(Qt.CopyAction)
         self.QFileList.setDragEnabled(True)
         self.QFileList.startDrag = self.startDrag
+        self.QFileList.setSelectionMode(QAbstractItemView.ExtendedSelection)
         
         self.loadList()
         self.restore_window_position()
@@ -108,6 +108,7 @@ class DocumentOrganizer(QWidget):
             pass
 
     def enabled_extensions(self):
+        """加载已启用的扩展"""
         self.selectedItem = self.QFileList.selectedItems()
         extensions = load_extensions()
 
@@ -168,7 +169,7 @@ class DocumentOrganizer(QWidget):
             self.sidebar.show()
 
     def onDoubleClick(self, item):
-        # 双击打开文件或目录
+        """双击打开文件或目录"""
         try:
             selection = item.text()
             if selection == "Back":  # 返回上一级目录
@@ -190,6 +191,7 @@ class DocumentOrganizer(QWidget):
             self.showError("错误", f"打开失败: {str(e)}")
     
     def loadList(self, drives=None):
+        """加载文件列表"""
         self.last_char = ""  # 重置上一次输入字符
         self.current_match_index = 0  # 重置当前匹配项索引
         self.QFileList.clear()  # 清空列表
@@ -275,7 +277,7 @@ class DocumentOrganizer(QWidget):
         return new
     
     def navigateUp(self):
-        # 导航到上一级目录
+        """导航到上一级目录"""
         ParentFolder = path.dirname(self.DestinationFolder)
         if ParentFolder == self.DestinationFolder:
             self.loadList(getAvailableDrives())
@@ -284,7 +286,7 @@ class DocumentOrganizer(QWidget):
             self.loadList()
     
     def keyPressEvent(self, event):
-        print(event.key())
+        """处理按键事件"""
         if self.is_wait_mode:
             if event.key() in self.marks:  # 按下标记则跳转到指定目录
                 self.DestinationFolder = self.marks[event.key()]
@@ -310,6 +312,19 @@ class DocumentOrganizer(QWidget):
                 self.is_wait_write_mark_mode = True  # 进入等待镌刻书签模式
             elif event.key() == 39:  # "'" 键
                 self.is_wait_mode = True  # 进入等待模式
+            
+            elif event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:  # "Ctrl+C" 复制
+                self.selectedItem = self.QFileList.selectedItems()
+                if self.selectedItem:
+                    self.copy_file()
+            elif event.key() == Qt.Key_X and event.modifiers() == Qt.ControlModifier:  # "Ctrl+X" 剪切
+                self.selectedItem = self.QFileList.selectedItems()
+                if self.selectedItem:
+                    self.cut_file()
+            elif event.key() == Qt.Key_V and event.modifiers() == Qt.ControlModifier:  # "Ctrl+V" 粘贴
+                self.paste_file()
+            elif event.key() == Qt.Key_Delete:  # "Delete" 删除
+                self.delete_file()
 
             elif event.key() == Qt.Key_Escape:
                 if self.is_search_mode:
@@ -492,7 +507,7 @@ class DocumentOrganizer(QWidget):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(Qt.white)
+        painter.setBrush(QColor(128, 128, 0, 100))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(0, 0, 64, 64)
         painter.drawPixmap(16, 16, QIcon(f"resource/img/{icon_name}").pixmap(32, 32))
@@ -696,7 +711,84 @@ class DocumentOrganizer(QWidget):
             self.showError("错误", f"执行命令失败: {str(e)}")
         except Exception as e:
             self.showError("错误", f"执行命令失败: {str(e)}")
+    
+    def copy_file(self):
+        """复制文件（仅记录路径和操作类型）"""
+        self.selectedItem = self.QFileList.selectedItems()
+        if not self.selectedItem:
+            return
+        self.clipboard_files = []
+        for item in self.selectedItem:
+            file_path = item.file_path if hasattr(item, 'file_path') else path.join(self.DestinationFolder, item.text())
+            self.clipboard_files.append(file_path)
+        self.clipboard_mode = "copy"
 
+    def cut_file(self):
+        """剪切文件（仅记录路径和操作类型）"""
+        self.selectedItem = self.QFileList.selectedItems()
+        if not self.selectedItem:
+            return
+        self.clipboard_files = []
+        for item in self.selectedItem:
+            file_path = item.file_path if hasattr(item, 'file_path') else path.join(self.DestinationFolder, item.text())
+            self.clipboard_files.append(file_path)
+        self.clipboard_mode = "cut"
+
+    def paste_file(self):
+        """粘贴文件（根据操作类型执行复制或剪切）"""
+        if not hasattr(self, 'clipboard_files') or not self.clipboard_files:
+            return
+        makedirs(self.DestinationFolder, exist_ok=True)
+        errors = []
+        for file in self.clipboard_files:
+            try:
+                dest_path = path.join(self.DestinationFolder, path.basename(file))
+                if self.clipboard_mode == "copy":
+                    if path.isdir(file):
+                        # 复制文件夹
+                        if path.exists(dest_path):
+                            rmtree(dest_path)
+                        from distutils.dir_util import copy_tree
+                        copy_tree(file, dest_path)
+                    else:
+                        copyfile(file, dest_path)
+                elif self.clipboard_mode == "cut":
+                    if path.isdir(file):
+                        if path.exists(dest_path):
+                            rmtree(dest_path)
+                        move(file, dest_path)
+                    else:
+                        move(file, dest_path)
+                else:
+                    continue
+            except Exception as e:
+                errors.append(f"{file}: {str(e)}")
+        # 剪切后清空剪贴板
+        if self.clipboard_mode == "cut":
+            self.clipboard_files = []
+        self.loadList()
+        if errors:
+            self.showError("粘贴失败", "\n".join(errors))
+
+    def delete_file(self):
+        """删除文件（支持多选）"""
+        self.selectedItem = self.QFileList.selectedItems()
+        if not self.selectedItem:
+            return
+        errors = []
+        for item in self.selectedItem:
+            file_path = item.file_path if hasattr(item, 'file_path') else path.join(self.DestinationFolder, item.text())
+            try:
+                if path.isdir(file_path):
+                    rmtree(file_path)
+                else:
+                    remove(file_path)
+            except Exception as e:
+                errors.append(f"{file_path}: {str(e)}")
+        self.loadList()
+        if errors:
+            self.showError("删除失败", "\n".join(errors))
+    
     def showSearchResult(self, keyword):
         """显示搜索结果"""
         self.QFileList.clear()
